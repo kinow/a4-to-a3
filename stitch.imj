@@ -1,15 +1,6 @@
-left_image = getArgument();
-right_image = getArgument();
-output = getArgument()
-print("Running stitch with arguments:");
-print(left_image);
-print(right_image);
-print(output);
-
-open(left_image);
-open(right_image);
-run("Pairwise stitching", "first_image=out_1.png second_image=out_2.png fusion_method=Median fused_image=" output " check_peaks=5 compute_overlap x=2426.0000 y=-13.0000 registration_channel_image_1=[Average all channels] registration_channel_image_2=[Average all channels]");
-saveAs("Tiff", "/home/kinow/Development/python/workspace/a4-to-a3/out_1.png<->out_2.tif");
-
+open("131-1.png");
+open("131-2.png");
+run("Pairwise stitching", "first_image=131-1.png second_image=131-2.png fusion_method=Median fused_image=131.png check_peaks=5 compute_overlap x=8426.0000 y=-13.0000 registration_channel_image_1=[Average all channels] registration_channel_image_2=[Average all channels]");
+saveAs("Png", "131.png");
 print("Done.");
 eval("script", "System.exit(0);");

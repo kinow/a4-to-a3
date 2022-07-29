@@ -3,9 +3,11 @@
 import argparse
 from pathlib import Path
 
-import numpy
 import pypdfium2 as pdfium
 from pypdfium2._helpers.misc import OptimiseMode
+
+import subprocess, os, sys
+import tempfile
 
 
 def main():
@@ -18,9 +20,10 @@ def main():
     # the PDF, and to export to image
     images = extract_images_from_pdf(args.in_file)
     print(images)
+    stitch_images(*images)
 
 
-def extract_images_from_pdf(in_file: str, dpi: int=300):
+def extract_images_from_pdf(in_file: str, dpi: int = 300):
     """Extract the images from the PDF.
 
     It must contain two images. The second image must be rotated 180 degrees.
@@ -44,6 +47,7 @@ def extract_images_from_pdf(in_file: str, dpi: int=300):
         in_file_stem = Path(in_file).stem
         left_page_name = f'{in_file_stem}-1.png'
         right_page_name = f'{in_file_stem}-2.png'
+        output = f'{in_file_stem}.png'
 
         left_page.save(left_page_name)
         left_page.close()
@@ -55,21 +59,39 @@ def extract_images_from_pdf(in_file: str, dpi: int=300):
         right_page = right_page.rotate(180)
         right_page.save(right_page_name)
         right_page.close()
-        return (left_page_name, right_page_name)
+        return (left_page_name, right_page_name, output)
 
 
-def stitch_images(left_page, right_page):
-    left_width, left_height = left_page.size
-    right_width, right_height = right_page.size
-    # 131.pdf has the same height
-    # TODO: Work out when the images have different heights,
-    #       choosing first the smallest, and the direction
-    #       of the search; L-R, or R-L.
-    # print(left_height, right_height)
+def stitch_images(left_page, right_page, output):
+    imagej_macro = f'''open("{left_page}");
+open("{right_page}");
+run("Pairwise stitching", "first_image={left_page} second_image={right_page} fusion_method=Median fused_image=131.png check_peaks=5 compute_overlap x=2426.0000 y=-13.0000 registration_channel_image_1=[Average all channels] registration_channel_image_2=[Average all channels]");
+saveAs("Png", "{output}");
+print("Done.");
+eval("script", "System.exit(0);");'''
 
-    # TODO: Read one column of the right image.
-    left_data = numpy.array(left_page)
-    print(left_data)
+    env = os.environ
+    # NOTE: we need an Oracle JVM 8
+    env['PATH'] = '/usr/lib/jvm/java-8-oracle/bin:' + env['PATH']
+    with tempfile.NamedTemporaryFile() as nf:
+        nf.write(imagej_macro.encode('UTF-8'))
+        nf.flush()
+        command = [
+            '/home/kinow/Downloads/Fiji.app/ImageJ-linux64',
+            '--ij2',
+            '--headless',
+            '--console',
+            '-macro',
+            nf.name]
+        process = subprocess.Popen(
+            command,
+            env=env,
+            stdout=sys.stdout,
+            stderr=sys.stderr)
+        process.wait()
+
+    Path(left_page).unlink()
+    Path(right_page).unlink()
 
 
 if __name__ == '__main__':

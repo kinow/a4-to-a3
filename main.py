@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 
 import argparse
+from pathlib import Path
+
+import numpy
 import pypdfium2 as pdfium
 from pypdfium2._helpers.misc import OptimiseMode
-import stitching
-import cv2
-import numpy
 
 
 def main():
@@ -13,38 +13,22 @@ def main():
     parser.add_argument('--in', dest='in_file', metavar='IN', type=str, required=True, help='Input PDF')
     args = parser.parse_args()
 
-    # doc = pdfium.FPDF_LoadDocument(args.in_file, None)
-    # page_count = pdfium.FPDF_GetPageCount(doc)
-    # assert page_count == 2
-    #
-    # form_config = pdfium.FPDF_FORMFILLINFO(2)
-    # form_fill = pdfium.FPDFDOC_InitFormFillEnvironment(doc, form_config)
-    #
-    # page = pdfium.FPDF_LoadPage(doc, 0)
-    # width = math.ceil(pdfium.FPDF_GetPageWidthF(page))
-    # height = math.ceil(pdfium.FPDF_GetPageHeightF(page))
-    #
-    # bitmap = pdfium.FPDFBitmap_Create(width, height, 0)
-    # pdfium.FPDFBitmap_FillRect(bitmap, 0, 0, width, height, 0xFFFFFFFF)
-    #
-    # render_args = [bitmap, page, 0, 0, width, height, 0, pdfium.FPDF_LCD_TEXT | pdfium.FPDF_ANNOT]
-    # pdfium.FPDF_RenderPageBitmap(*render_args)
-    # pdfium.FPDF_FFLDraw(form_fill, *render_args)
-    #
-    # cbuffer = pdfium.FPDFBitmap_GetBuffer(bitmap)
-    # buffer = ctypes.cast(cbuffer, ctypes.POINTER(ctypes.c_ubyte * (width * height * 4)))
-    #
-    # img = Image.frombuffer("RGBA", (width, height), buffer.contents, "raw", "BGRA", 0, 1)
-    # img.save("out.png")
-    #
-    # pdfium.FPDFBitmap_Destroy(bitmap)
-    # pdfium.FPDF_ClosePage(page)
-    #
-    # pdfium.FPDFDOC_ExitFormFillEnvironment(form_fill)
-    # pdfium.FPDF_CloseDocument(doc)
+    # Using the images produced by ImageJ's Extract from PDF plug-in results in
+    # the wrong output for the Stitch plug-in. So we are using pypdfium2 to read
+    # the PDF, and to export to image
+    images = extract_images_from_pdf(args.in_file)
+    print(images)
 
-    dpi = 300
-    with pdfium.PdfDocument(args.in_file) as pdf:
+
+def extract_images_from_pdf(in_file: str, dpi: int=300):
+    """Extract the images from the PDF.
+
+    It must contain two images. The second image must be rotated 180 degrees.
+
+    :in_file: input file
+    :dpi: image quality
+    """
+    with pdfium.PdfDocument(in_file) as pdf:
         n_pages = len(pdf)
         if n_pages != 2:
             raise ValueError(f'Expected a 2-pages PDF, but got a {n_pages}-page(s) PDF.')
@@ -52,44 +36,40 @@ def main():
         page_indices = [i for i in range(n_pages)]
         renderer = pdf.render_topil(
             page_indices=page_indices,
-            scale=dpi/72,  # https://github.com/pypdfium2-team/pypdfium2/issues/98
+            scale=dpi / 72,  # https://github.com/pypdfium2-team/pypdfium2/issues/98
             optimise_mode=OptimiseMode.NONE,
         )
+        (left_page, right_page) = list(renderer)
 
-        # for image, index in zip(renderer, page_indices):
-        #     image_filename = f'out_{str(index).zfill(n_pages)}.jpg'
-        #     image.save(image_filename)
-        #     image.close()
+        in_file_stem = Path(in_file).stem
+        left_page_name = f'{in_file_stem}-1.png'
+        right_page_name = f'{in_file_stem}-2.png'
 
-        images = list(renderer)
-        page_1 = images[0]
-        page_2 = images[1]
+        left_page.save(left_page_name)
+        left_page.close()
 
-        page_1.save('out_1.png')
-        page_2 = page_2.rotate(180)
-        page_2.save('out_2.png')
+        # When we scan an A3 document, in an A4 scanner, we get
+        # two files of about the A4 size (scanner beds are larger
+        # normally). The second A4 file will be inverted 180
+        # degrees, so we need to rotate it here.
+        right_page = right_page.rotate(180)
+        right_page.save(right_page_name)
+        right_page.close()
+        return (left_page_name, right_page_name)
 
-        stitcher = cv2.Stitcher_create(mode=cv2.Stitcher_PANORAMA)
-        stitcher.setPanoConfidenceThresh(0.1)
-        opencv_page_1 = cv2.cvtColor(numpy.array(page_1), cv2.COLOR_RGB2BGR)
-        opencv_page_2 = cv2.cvtColor(numpy.array(page_2), cv2.COLOR_RGB2BGR)
 
-        status, result = stitcher.stitch([opencv_page_1, opencv_page_2])
-        #  OK = 0,
-        #  ERR_NEED_MORE_IMGS = 1,
-        #  ERR_HOMOGRAPHY_EST_FAIL = 2,
-        #  ERR_CAMERA_PARAMS_ADJUST_FAIL = 3
-        if status != cv2.Stitcher_OK:
-            raise ValueError("Can't stitch images, error code = %d" % status)
-        cv2.imwrite("stitched.png", result)
+def stitch_images(left_page, right_page):
+    left_width, left_height = left_page.size
+    right_width, right_height = right_page.size
+    # 131.pdf has the same height
+    # TODO: Work out when the images have different heights,
+    #       choosing first the smallest, and the direction
+    #       of the search; L-R, or R-L.
+    # print(left_height, right_height)
 
-        # settings = {"confidence_threshold": 0.2}
-        # stitcher = stitching.Stitcher(**settings)
-        # panorama = stitcher.stitch(['out_1.png', 'out_2.png'])
-        # print(panorama)
-
-        page_1.close()
-        page_2.close()
+    # TODO: Read one column of the right image.
+    left_data = numpy.array(left_page)
+    print(left_data)
 
 
 if __name__ == '__main__':

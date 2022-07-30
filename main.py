@@ -8,11 +8,12 @@ import sys
 import tempfile
 from pathlib import Path
 from typing import Tuple, Iterable
-from PIL.Image import Image
 
 import pypdfium2 as pdfium
+from PIL.Image import Image
 from pypdfium2._helpers.misc import OptimiseMode
 
+from joblib import Parallel, delayed
 
 ORACLE_JVM_8 = '/usr/lib/jvm/java-8-oracle'
 FIJI_IMAGEJ_EXECUTABLE = '/home/kinow/Downloads/Fiji.app/ImageJ-linux64'
@@ -32,7 +33,8 @@ def main():
     parser = argparse.ArgumentParser(
         description='Converts a 2-page A4 document into a single page A3, stitching images that overlap.')
     parser.add_argument(dest='in_files', nargs='+', metavar='IN', type=str, help='Input PDF')
-    parser.add_argument('--keep-files', action='store_true', help='Flag to keep intermediary files (left and right pages)')
+    parser.add_argument('--keep-files', action='store_true',
+                        help='Flag to keep intermediary files (left and right pages)')
     parser.add_argument('--debug', action='store_true', help='Log debug information')
     args = parser.parse_args()
 
@@ -43,21 +45,25 @@ def main():
     # the wrong output for the Stitch plug-in. So we are using pypdfium2 to read
     # the PDF, and to export to image
     for in_file in args.in_files:
-        try:
-            left_page, left_page_name, right_page, right_page_name, output = extract_images_from_pdf(in_file)
-            stitch_images(
-                left_page=left_page,
-                left_page_name=left_page_name,
-                right_page=right_page,
-                right_page_name=right_page_name,
-                output=output,
-                keep_files=args.keep_files)
-        except ExtractImagesFromPdfException as e:
-            logging.error(f'Failed to extract images from PDF {in_file}: {e}', e)
-        except StitchImageException as e:
-            logging.error(f'Failed to stitch images from PDF {in_file}: {e}', e)
-        except Exception as e:
-            logging.fatal(f'Unexpected error: {e}', e)
+        process_pdf(in_file)
+
+
+def process_pdf(pdf_file):
+    try:
+        left_page, left_page_name, right_page, right_page_name, output = extract_images_from_pdf(pdf_file)
+        stitch_images(
+            left_page=left_page,
+            left_page_name=left_page_name,
+            right_page=right_page,
+            right_page_name=right_page_name,
+            output=output,
+            keep_files=pdf_file)
+    except ExtractImagesFromPdfException as e:
+        logging.error(f'Failed to extract images from PDF {pdf_file}: {e}', e)
+    except StitchImageException as e:
+        logging.error(f'Failed to stitch images from PDF {pdf_file}: {e}', e)
+    except Exception as e:
+        logging.fatal(f'Unexpected error: {e}', e)
 
 
 def extract_images_from_pdf(in_file: str, dpi: int = 300) -> Tuple[Image, str, Image, str, str]:

@@ -2,6 +2,7 @@
 
 import argparse
 import logging
+import multiprocessing
 import os
 import subprocess
 import sys
@@ -11,9 +12,8 @@ from typing import Tuple, Iterable
 
 import pypdfium2 as pdfium
 from PIL.Image import Image
-from pypdfium2._helpers.misc import OptimiseMode
-
 from joblib import Parallel, delayed
+from pypdfium2._helpers.misc import OptimiseMode
 
 ORACLE_JVM_8 = '/usr/lib/jvm/java-8-oracle'
 FIJI_IMAGEJ_EXECUTABLE = '/home/kinow/Downloads/Fiji.app/ImageJ-linux64'
@@ -44,11 +44,15 @@ def main():
     # Using the images produced by ImageJ's Extract from PDF plug-in results in
     # the wrong output for the Stitch plug-in. So we are using pypdfium2 to read
     # the PDF, and to export to image
-    for in_file in args.in_files:
-        process_pdf(in_file)
+    n_jobs = multiprocessing.cpu_count()
+    n_jobs = min(n_jobs, len(args.in_files))
+    if n_jobs > 1:
+        n_jobs = n_jobs - 1
+    logger.info(f"Running {n_jobs} jobs")
+    Parallel(n_jobs=n_jobs, verbose=100)(delayed(process_pdf)(in_file, args.keep_files) for in_file in args.in_files)
 
 
-def process_pdf(pdf_file):
+def process_pdf(pdf_file: str, keep_files: bool = False) -> None:
     try:
         left_page, left_page_name, right_page, right_page_name, output = extract_images_from_pdf(pdf_file)
         stitch_images(
@@ -57,7 +61,7 @@ def process_pdf(pdf_file):
             right_page=right_page,
             right_page_name=right_page_name,
             output=output,
-            keep_files=pdf_file)
+            keep_files=keep_files)
     except ExtractImagesFromPdfException as e:
         logging.error(f'Failed to extract images from PDF {pdf_file}: {e}', e)
     except StitchImageException as e:

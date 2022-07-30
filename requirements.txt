@@ -1,2 +1,3 @@
 pypdfium2==2.7.*
 pillow==9.2.*
+types-Pillow==9.2.*

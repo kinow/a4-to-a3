@@ -119,15 +119,16 @@ def stitch_images(
         right_page: Image,
         right_page_name: str,
         output: str,
-        keep_files: bool = False):
+        keep_files: bool = False,
+        threshold=0.1):
     logging.info(f'Stitching image {left_page_name} with {right_page_name}, will save as {output}')
     imagej_macro = f'''open("{left_page_name}");
 open("{right_page_name}");
 selectWindow("{left_page_name}");
-makeRectangle(2264, 0, 217, 3430);
+makeRectangle({left_page.width * (1.0 - threshold)}, 0, {threshold * left_page.width}, {left_page.height});
 open("{right_page_name}");
 selectWindow("{right_page_name}");
-makeRectangle(0, 30, 288, 3414);
+makeRectangle(0, 0, {threshold * right_page.width}, {right_page.height});
 run("Pairwise stitching", "first_image={left_page_name} second_image={right_page_name} fusion_method=[Linear Blending] fused_image={output} check_peaks=10 compute_overlap subpixel_accuracy x=2426.0000 y=-13.0000 registration_channel_image_1=[Average all channels] registration_channel_image_2=[Average all channels]");
 saveAs("Png", "{output}");
 print("Done.");

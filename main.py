@@ -125,10 +125,10 @@ def stitch_images(
     imagej_macro = f'''open("{left_page_name}");
 open("{right_page_name}");
 selectWindow("{left_page_name}");
-makeRectangle({left_page.width * (1.0 - threshold)}, 0, {threshold * left_page.width}, {left_page.height});
+makeRectangle({left_page.width * (1.0 - threshold)}, 50, {threshold * left_page.width}, {left_page.height - 50});
 open("{right_page_name}");
 selectWindow("{right_page_name}");
-makeRectangle(0, 0, {threshold * right_page.width}, {right_page.height});
+makeRectangle(0, 50, {threshold * right_page.width}, {right_page.height - 50});
 run("Pairwise stitching", "first_image={left_page_name} second_image={right_page_name} fusion_method=[Linear Blending] fused_image={output} check_peaks=10 compute_overlap subpixel_accuracy x=2426.0000 y=-13.0000 registration_channel_image_1=[Average all channels] registration_channel_image_2=[Average all channels]");
 saveAs("Png", "{output}");
 print("Done.");

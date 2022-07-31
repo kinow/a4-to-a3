@@ -13,6 +13,8 @@ These A3 pages are scanned in a Brother MFCL2720DW Monochrome wireless
 laser all-in-one printer. Due to the scanner glass size, it is not possible
 to scan the document in one go.
 
+![](./printer.jpg)
+
 The A3 page is scanned twice. The first half is scanned facing up, and the
 second half needs to be scanned rotated 180 degrees. Previously GIMP was
 used to stitch the images, manually, changing opacity of layers.

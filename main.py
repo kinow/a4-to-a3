@@ -10,8 +10,8 @@ import tempfile
 from pathlib import Path
 from typing import Tuple, Iterable, Union
 
-import pypdfium2 as pdfium
 import PIL
+import pypdfium2 as pdfium
 from PIL.Image import Image
 from joblib import Parallel, delayed
 from pypdfium2._helpers.misc import OptimiseMode
@@ -196,6 +196,8 @@ def adjust_levels_resize(image: Path) -> None:
     else:
         biggest_side = width if width > height else height
 
+    image_square = f'{image.parent / image.stem}-square.png'
+
     imagej_macro = f'''Color.setBackground("white");
     open("{image.absolute()}");
     selectWindow("{image.name}");
@@ -204,12 +206,20 @@ def adjust_levels_resize(image: Path) -> None:
     setMinAndMax(81, 252);
     saveAs("Png", "{image.absolute()}");
     run("Canvas Size...", "width={biggest_side} height={biggest_side} position=Center");
-    saveAs("Png", "{image.parent / image.stem }-square.png");
+    saveAs("Png", "{image_square}");
     print("Done.");
     eval("script", "System.exit(0);");'''
 
     try:
         run_imagej_macro(imagej_macro)
+
+        # Similar to GIMP auto-input-levels
+        # see: https://stackoverflow.com/questions/69157142/gimp-autoinputlevels-in-imagemagick
+        auto_input_levels_command = '''
+            convert {} -channel rgb -contrast-stretch 0.6%x0.6% {}
+        '''.strip()
+        _execute_command(auto_input_levels_command.format(image.absolute(), image.absolute()).split(' '))
+        _execute_command(auto_input_levels_command.format(image_square, image_square).split(' '))
     except Exception as e:
         raise AdjustLevelsException(f'Failed to execute Fiji ImageJ macro: {e}', e)
 
@@ -232,12 +242,18 @@ def run_imagej_macro(imagej_macro: str) -> None:
             '-macro',
             nf.name]
         logging.debug(f'Executing Fiji ImageJ macro with command: {" ".join(command)}')
-        process = subprocess.Popen(
-            command,
-            env=env,
-            stdout=sys.stdout,
-            stderr=sys.stderr)
-        process.wait()
+        _execute_command(command, env)
+
+
+def _execute_command(command, env=None):
+    if env is None:
+        env = os.environ
+    process = subprocess.Popen(
+        command,
+        env=env,
+        stdout=sys.stdout,
+        stderr=sys.stderr)
+    process.wait()
 
 
 if __name__ == '__main__':

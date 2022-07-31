@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Tuple, Iterable, Union
 
 import pypdfium2 as pdfium
+import PIL
 from PIL.Image import Image
 from joblib import Parallel, delayed
 from pypdfium2._helpers.misc import OptimiseMode
@@ -19,6 +20,8 @@ from pypdfium2._helpers.misc import OptimiseMode
 #       after Java 8, and also uses Sun classes (removed from OpenJDK, Azul, etc.).
 ORACLE_JVM_8 = '/usr/lib/jvm/java-8-oracle'
 FIJI_IMAGEJ_EXECUTABLE = '/home/kinow/Downloads/Fiji.app/ImageJ-linux64'
+
+OUTPUT_FILE_SIZE = 2000
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +75,7 @@ def process_pdf(pdf_file: str, keep_files: bool = False) -> None:
             right_page_path=right_page_path,
             output=output,
             keep_files=keep_files)
-        adjust_levels(
+        adjust_levels_resize(
             image=output
         )
     except ExtractImagesFromPdfException as e:
@@ -175,13 +178,33 @@ eval("script", "System.exit(0);");'''
         right_page_path.unlink()
 
 
-def adjust_levels(image: Path) -> None:
+def adjust_levels_resize(image: Path) -> None:
     logging.info(f'Adjusting brightness and contrast')
-    imagej_macro = f'''open("{image.absolute()}");
+
+    with PIL.Image.open(image.absolute()) as image_file:
+        width = image_file.width
+        height = image_file.height
+
+    if width > OUTPUT_FILE_SIZE or height > OUTPUT_FILE_SIZE:
+        biggest_side = OUTPUT_FILE_SIZE
+        if width > height:
+            ratio = OUTPUT_FILE_SIZE / width
+        else:
+            ratio = OUTPUT_FILE_SIZE / height
+        width = width * ratio
+        height = height * ratio
+    else:
+        biggest_side = width if width > height else height
+
+    imagej_macro = f'''Color.setBackground("white");
+    open("{image.absolute()}");
     selectWindow("{image.name}");
+    run("Size...", "width={width} height={height} depth=1 constrain average interpolation=Bilinear");
     // run("Brightness/Contrast...");
     setMinAndMax(81, 252);
     saveAs("Png", "{image.absolute()}");
+    run("Canvas Size...", "width={biggest_side} height={biggest_side} position=Center");
+    saveAs("Png", "{image.parent / image.stem }-square.png");
     print("Done.");
     eval("script", "System.exit(0);");'''
 
